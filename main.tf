@@ -71,27 +71,6 @@ module "blog_sg" {
   egress_cidr_blocks = ["0.0.0.0/0"]
 }
 
-# 5. EC2 Instance
-resource "aws_instance" "blog" {
-  ami                    = data.aws_ami.app_ami.id
-  instance_type          = var.instance_type
-  vpc_security_group_ids = [module.blog_sg.security_group_id]
-  subnet_id              = module.blog_vpc.public_subnets[0]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              dnf update -y
-              dnf install -y httpd
-              systemctl start httpd
-              systemctl enable httpd
-              echo "<h1>Terraform Learning: Server Live!</h1>" > /var/www/html/index.html
-              EOF
-
-  tags = {
-    Name = "HelloWorld"
-  }
-}
-
 # 6. Application Load Balancer (ALB) Module (Stripped of target configs)
 module "blog_alb" {
   source  = "terraform-aws-modules/alb/aws"
@@ -107,9 +86,7 @@ module "blog_alb" {
     blog-http = {
       port     = 80
       protocol = "HTTP"
-      forward = {
-        target_group_arn = aws_lb_target_group.blog.arn
-      }
+      target_group_arn = aws_lb_target_group.blog.arn
     }
   }
 
@@ -145,8 +122,25 @@ resource "aws_lb_target_group_attachment" "blog" {
   port             = 80
 }
 
-# 9. Outputs
-output "alb_dns_name" {
-  value       = module.blog_alb.dns_name
-  description = "Use this URL in your browser to view the web server live"
+module "blog_autoscaling" {
+  source  = "terraform-aws-modules/autoscaling/aws"
+  version = "9.3.0"
+
+  name = "blog"
+
+  min_size = 1
+  max_size = 2
+
+  vpc_zone_identifier = module.blog_vpc.public_subnets
+
+  launch_template_name = "blog"
+  security_groups      = [module.blog_sg.security_group_id]
+  instance_type        = var.instance_type
+  image_id             = data.aws_ami.app_ami.id
+
+  traffic_source_attachments = {
+    blog_alb = {
+      traffic_source_identifier = aws_lb_target_group.blog.arn
+    }
+  }
 }
