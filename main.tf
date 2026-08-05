@@ -1,10 +1,10 @@
 data "aws_ami" "app_ami" {
   most_recent = true
-  owners      = ["amazon"] # Canonical
+  owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = ["al2023-ami-202*-x86_64"]
+    values = ["al2023-ami-202*.*-x86_64"]
   }
 
   filter {
