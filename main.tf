@@ -4,12 +4,7 @@ data "aws_ami" "app_ami" {
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
+    values = ["al2023-ami-202*-x86_64"]
   }
 
   filter {
@@ -48,6 +43,15 @@ resource "aws_instance" "blog" {
 
   subnet_id = module.blog_vpc.public_subnets[0]
 
+  user_data = <<-EOF
+              #!/bin/bash
+              dnf update -y
+              dnf install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              echo "<h1>Terraform Learning: Server Live!</h1>" > /var/www/html/index.html
+              EOF
+
   tags = {
     Name = "HelloWorld"
   }
@@ -65,4 +69,8 @@ module "blog_sg" {
 
   egress_rules       = ["all-all"]
   egress_cidr_blocks = ["0.0.0.0/0"]
+}
+
+output "public_ip" {
+  value = aws_instance.web_server.public_ip
 }
