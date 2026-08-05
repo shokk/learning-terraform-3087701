@@ -81,37 +81,40 @@ module "blog_alb" {
 
   security_groups = [module.alb_sg.security_group_id]
 
+  # 🟢 FIX 1: Modern v9+ listener schema mapping syntax
   listeners = {
     blog-http = {
-      port               = 80
-      protocol           = "HTTP"
-      # FIXED: Points natively to the default action template at index position 0
-      target_group_index = 0
+      port     = 80
+      protocol = "HTTP"
+      forward = {
+        target_group_key = "blog_tg"
+      }
+    }
+  }
+
+  # 🟢 FIX 2: Modern v9+ embedded target group configuration schema
+  target_groups = {
+    blog_tg = {
+      name_prefix      = "blog-"
+      protocol         = "HTTP"
+      port             = 80
+      target_type      = "instance"
+      
+      health_check = {
+        enabled             = true
+        path                = "/"
+        port                = "80"
+        protocol            = "HTTP"
+        interval            = 30
+        timeout             = 5
+        healthy_threshold   = 3
+        unhealthy_threshold = 3
+      }
     }
   }
 
   tags = {
     Environment = "dev"
-  }
-}
-
-# 7. Standalone Target Group (Safe from module loops)
-resource "aws_lb_target_group" "blog" {
-  name        = "blog-tg-fixed"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = module.blog_vpc.vpc_id
-  target_type = "instance"
-
-  health_check {
-    enabled             = true
-    path                = "/"
-    port                = "80"
-    protocol            = "HTTP"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
   }
 }
 
@@ -133,7 +136,8 @@ module "blog_autoscaling" {
 
   traffic_source_attachments = {
     blog_alb = {
-      traffic_source_identifier = aws_lb_target_group.blog.arn
+      # 🟢 FIX 3: Pull the target group ARN directly from the ALB module outputs mapping
+      traffic_source_identifier = module.blog_alb.target_groups["blog_tg"].arn
     }
   }
 }
