@@ -1,92 +1,77 @@
-data "aws_ami" "app_ami" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["al2023-ami-202*.*-x86_64"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}
-
-module "blog_vpc" {
-  source = "terraform-aws-modules/vpc/aws"
-  version = "6.6.1"
-
-  name = "dev"
-  cidr = "10.0.0.0/16"
-
-  azs             = ["us-west-2a", "us-west-2b", "us-west-2c"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
-
-  enable_nat_gateway = true
-
-  tags = {
-    Terraform = "true"
-    Environment = "dev"
-  }
-}
-
-resource "aws_instance" "blog" {
-  ami           = data.aws_ami.app_ami.id
-  instance_type = var.instance_type
-  vpc_security_group_ids = [module.blog_sg.security_group_id]
-
-  subnet_id = module.blog_vpc.public_subnets[0]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              dnf update -y
-              dnf install -y httpd
-              systemctl start httpd
-              systemctl enable httpd
-              echo "<h1>Terraform Learning: Server Live!</h1>" > /var/www/html/index.html
-              EOF
-
-  tags = {
-    Name = "HelloWorld"
-  }
-}
-
-module "blog_sg" {
+# 1. NEW: Dedicated Security Group for the Load Balancer
+module "alb_sg" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "4.13.0"
-  name    = "blog"
+  version = "5.1.0"
+  name    = "blog-alb-sg"
+  vpc_id  = module.blog_vpc.vpc_id
 
-  vpc_id = module.blog_vpc.vpc_id
-
-  ingress_rules       = ["http-80-tcp","https-443-tcp"]
+  # Open to the public internet
+  ingress_rules       = ["http-80-tcp", "https-443-tcp"]
   ingress_cidr_blocks = ["0.0.0.0/0"]
 
   egress_rules       = ["all-all"]
   egress_cidr_blocks = ["0.0.0.0/0"]
 }
 
+# 2. UPDATED: Security Group for the EC2 Instance (Strictly allows traffic from the ALB)
+module "blog_sg" {
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "5.1.0"
+  name    = "blog-app-sg"
+  vpc_id  = module.blog_vpc.vpc_id
+
+  # CRITICAL FIX: Only accept HTTP traffic on port 80 if it comes from our ALB security group
+  ingress_with_source_security_group_id = [
+    {
+      rule                     = "http-80-tcp"
+      source_security_group_id = module.alb_sg.security_group_id
+    }
+  ]
+
+  egress_rules       = ["all-all"]
+  egress_cidr_blocks = ["0.0.0.0/0"]
+}
+
+# 3. FIXED: ALB Module using correct v9+ structure
 module "blog_alb" {
-  source = "terraform-aws-modules/alb/aws"
+  source  = "terraform-aws-modules/alb/aws"
+  version = "9.9.0"
 
   name    = "blog-alb"
   vpc_id  = module.blog_vpc.vpc_id
   subnets = module.blog_vpc.public_subnets
 
-  security_groups = [module.blog_sg.security_group_id]
+  # Use the dedicated ALB security group
+  security_groups = [module.alb_sg.security_group_id]
 
   listeners = {
     blog-http = {
       port     = 80
       protocol = "HTTP"
-      forward  = {
-        target_group_arn = aws_lb_target_group.blog.arn
+      # FIX: Correct module map structure for routing traffic to the target group
+      forward = {
+        target_group_key = "blog_tg"
+      }
+    }
+  }
+
+  target_groups = {
+    blog_tg = {
+      name_prefix      = "blog-"
+      protocol         = "HTTP"
+      port             = 80
+      target_type      = "instance"
+      
+      # Health check configuration to monitor your Apache server
+      health_check = {
+        enabled             = true
+        path                = "/"
+        port                = "80"
+        protocol            = "HTTP"
+        interval            = 30
+        timeout             = 5
+        healthy_threshold   = 3
+        unhealthy_threshold = 3
       }
     }
   }
@@ -96,24 +81,13 @@ module "blog_alb" {
   }
 }
 
-resource "aws_lb_target_group" "blog" {
-  name     = "blog-target-group"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = module.blog_vpc.vpc_id
-  
-  # Target groups defaults to IP, but since you are attaching an ec2 instance 
-  # via its ID in your attachment below, set target_type to "instance"
-  target_type = "instance"
-}
-
-
+# 4. UPDATED: Target Group Attachment targeting the module's generated group
 resource "aws_lb_target_group_attachment" "blog" {
-  target_group_arn = aws_lb_target_group.blog.arn
+  # Dynamically pull the ARN created internally by the ALB module
+  target_group_arn = module.blog_alb.target_groups["blog_tg"].arn
   target_id        = aws_instance.blog.id
   port             = 80
 }
 
-output "public_ip" {
-  value = aws_instance.blog.public_ip
-}
+# NOTE: You can safely delete your separate standalone "aws_lb_target_group" "blog" 
+# resource block since the ALB module now builds it natively above!
