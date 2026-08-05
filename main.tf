@@ -100,12 +100,17 @@ module "blog_alb" {
   }
 }
 
-resource "blog" "test" {
-  name     = "blog"
+resource "aws_lb_target_group" "blog" {
+  name     = "blog-target-group"
   port     = 80
   protocol = "HTTP"
   vpc_id   = module.blog_vpc.vpc_id
+  
+  # Target groups defaults to IP, but since you are attaching an ec2 instance 
+  # via its ID in your attachment below, set target_type to "instance"
+  target_type = "instance"
 }
+
 
 resource "aws_lb_target_group_attachment" "blog" {
   target_group_arn = aws_lb_target_group.blog.arn
