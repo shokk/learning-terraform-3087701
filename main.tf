@@ -1,6 +1,6 @@
 data "aws_ami" "app_ami" {
   most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners      = ["amazon"] # Canonical
 
   filter {
     name   = "name"
@@ -89,7 +89,7 @@ module "blog_alb" {
     blog-http = {
       port     = 80
       protocol = "HTTP"
-      forward = {
+      forward  = {
         target_group_arn = aws_lb_target_group.blog.arn
       }
     }
