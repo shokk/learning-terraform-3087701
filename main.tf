@@ -87,10 +87,10 @@ module "blog_alb" {
       port     = 80
       protocol = "HTTP"
       
-      actions = [{
-        type             = "forward"
+      # FIXED: Using the module's native forward schema mapping
+      forward = {
         target_group_arn = aws_lb_target_group.blog.arn
-      }]
+      }
     }
   }
 
