@@ -81,7 +81,6 @@ module "blog_alb" {
 
   security_groups = [module.alb_sg.security_group_id]
 
-  # 🟢 FIX 1: Modern v9+ listener schema mapping syntax
   listeners = {
     blog-http = {
       port     = 80
@@ -92,7 +91,6 @@ module "blog_alb" {
     }
   }
 
-  # 🟢 FIX 2: Modern v9+ embedded target group configuration schema
   target_groups = {
     blog_tg = {
       name_prefix      = "blog-"
@@ -100,6 +98,9 @@ module "blog_alb" {
       port             = 80
       target_type      = "instance"
       
+      # 🟢 FIX: Tells the module to skip its internal target attachment loop
+      create_attachment = false
+
       health_check = {
         enabled             = true
         path                = "/"
