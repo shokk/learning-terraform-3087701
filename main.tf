@@ -71,7 +71,6 @@ module "blog_sg" {
   egress_cidr_blocks = ["0.0.0.0/0"]
 }
 
-# 6. Application Load Balancer (ALB) Module (Stripped of target configs)
 module "blog_alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "9.9.0"
@@ -84,13 +83,10 @@ module "blog_alb" {
 
   listeners = {
     blog-http = {
-      port     = 80
-      protocol = "HTTP"
-      
-      # FIXED: Using the module's native forward schema mapping
-      forward = {
-        target_group_arn = aws_lb_target_group.blog.arn
-      }
+      port               = 80
+      protocol           = "HTTP"
+      # FIXED: Points natively to the default action template at index position 0
+      target_group_index = 0
     }
   }
 
