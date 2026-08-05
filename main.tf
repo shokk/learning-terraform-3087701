@@ -76,8 +76,6 @@ resource "aws_instance" "blog" {
   ami                    = data.aws_ami.app_ami.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [module.blog_sg.security_group_id]
-  
-  # FIX: Selected the first subnet string from the public subnet list
   subnet_id              = module.blog_vpc.public_subnets[0]
 
   user_data = <<-EOF
@@ -94,7 +92,7 @@ resource "aws_instance" "blog" {
   }
 }
 
-# 6. Application Load Balancer (ALB) Module
+# 6. Application Load Balancer (ALB) Module (Stripped of target configs)
 module "blog_alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "9.9.0"
@@ -110,35 +108,7 @@ module "blog_alb" {
       port     = 80
       protocol = "HTTP"
       forward = {
-        target_group_key = "blog_tg"
-      }
-    }
-  }
-
-  target_groups = {
-    blog_tg = {
-      name_prefix      = "blog-"
-      protocol         = "HTTP"
-      port             = 80
-      target_type      = "instance"
-      
-      # FIX: Native inline target attachment inside the module
-      targets = {
-        my_ec2_target = {
-          target_id = aws_instance.blog.id
-          port      = 80
-        }
-      }
-
-      health_check = {
-        enabled             = true
-        path                = "/"
-        port                = "80"
-        protocol            = "HTTP"
-        interval            = 30
-        timeout             = 5
-        healthy_threshold   = 3
-        unhealthy_threshold = 3
+        target_group_arn = aws_lb_target_group.blog.arn
       }
     }
   }
@@ -148,7 +118,34 @@ module "blog_alb" {
   }
 }
 
-# 7. Outputs
+# 7. Standalone Target Group (Safe from module loops)
+resource "aws_lb_target_group" "blog" {
+  name        = "blog-tg-fixed"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = module.blog_vpc.vpc_id
+  target_type = "instance"
+
+  health_check {
+    enabled             = true
+    path                = "/"
+    port                = "80"
+    protocol            = "HTTP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
+
+# 8. Standalone Target Group Attachment
+resource "aws_lb_target_group_attachment" "blog" {
+  target_group_arn = aws_lb_target_group.blog.arn
+  target_id        = aws_instance.blog.id
+  port             = 80
+}
+
+# 9. Outputs
 output "alb_dns_name" {
   value       = module.blog_alb.dns_name
   description = "Use this URL in your browser to view the web server live"
