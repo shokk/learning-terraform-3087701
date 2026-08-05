@@ -72,10 +72,6 @@ module "blog_sg" {
   egress_cidr_blocks = ["0.0.0.0/0"]
 }
 
-output "public_ip" {
-  value = aws_instance.blog.public_ip
-}
-
 module "blog_alb" {
   source = "terraform-aws-modules/alb/aws"
 
@@ -116,4 +112,8 @@ resource "aws_lb_target_group_attachment" "blog" {
   target_group_arn = aws_lb_target_group.blog.arn
   target_id        = aws_instance.blog.id
   port             = 80
+}
+
+output "public_ip" {
+  value = aws_instance.blog.public_ip
 }
