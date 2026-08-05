@@ -19,7 +19,7 @@ data "aws_ami" "app_ami" {
   }
 }
 
-# 2. VPC Module (Resolves "undeclared module 'blog_vpc'" errors)
+# 2. VPC Module
 module "blog_vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "6.6.1"
@@ -71,11 +71,13 @@ module "blog_sg" {
   egress_cidr_blocks = ["0.0.0.0/0"]
 }
 
-# 5. EC2 Instance (Resolves "undeclared resource 'aws_instance.blog'" errors)
+# 5. EC2 Instance
 resource "aws_instance" "blog" {
   ami                    = data.aws_ami.app_ami.id
   instance_type          = var.instance_type
   vpc_security_group_ids = [module.blog_sg.security_group_id]
+  
+  # FIX: Selected the first subnet string from the public subnet list
   subnet_id              = module.blog_vpc.public_subnets[0]
 
   user_data = <<-EOF
@@ -120,6 +122,14 @@ module "blog_alb" {
       port             = 80
       target_type      = "instance"
       
+      # FIX: Native inline target attachment inside the module
+      targets = {
+        my_ec2_target = {
+          target_id = aws_instance.blog.id
+          port      = 80
+        }
+      }
+
       health_check = {
         enabled             = true
         path                = "/"
@@ -138,14 +148,7 @@ module "blog_alb" {
   }
 }
 
-# 7. Target Group Attachment
-resource "aws_lb_target_group_attachment" "blog" {
-  target_group_arn = module.blog_alb.target_groups["blog_tg"].arn
-  target_id        = aws_instance.blog.id
-  port             = 80
-}
-
-# 8. Output for the Load Balancer DNS URL
+# 7. Outputs
 output "alb_dns_name" {
   value       = module.blog_alb.dns_name
   description = "Use this URL in your browser to view the web server live"
