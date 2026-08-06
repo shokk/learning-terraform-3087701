@@ -1,17 +1,18 @@
 # 1. AMI Data Lookup
 data "aws_ami" "app_ami" {
   most_recent = true
-  owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = ["al2023-ami-202*.*-x86_64"]
+    values = [var.ami_filter.name]
   }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+
+  owners   = [var.ami_filter.owner]
 
   filter {
     name   = "state"
@@ -24,12 +25,12 @@ module "blog_vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "6.6.1"
 
-  name = "dev"
-  cidr = "10.0.0.0/16"
+  name = var.environment.name
+  cidr = "${var.environment.network_prefix}.0.0/16"
 
   azs             = ["us-west-2a", "us-west-2b", "us-west-2c"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+  private_subnets = ["${var.environment.network_prefix}.1.0/24", "${var.environment.network_prefix}.2.0/24", "${var.environment.network_prefix}.3.0/24"]
+  public_subnets  = ["${var.environment.network_prefix}.101.0/24", "${var.environment.network_prefix}.102.0/24", "${var.environment.network_prefix}.103.0/24"]
 
   map_public_ip_on_launch = true
 
@@ -37,7 +38,7 @@ module "blog_vpc" {
 
   tags = {
     Terraform   = "true"
-    Environment = "dev"
+    Environment = var.environment.name
   }
 }
 
@@ -117,7 +118,7 @@ module "blog_alb" {
   }
 
   tags = {
-    Environment = "dev"
+    Environment = var.environment.name
   }
 }
 
@@ -127,8 +128,8 @@ module "blog_autoscaling" {
 
   name = "blog"
 
-  min_size = 1
-  max_size = 2
+  min_size = var.min_size
+  max_size = var.max_size
 
   vpc_zone_identifier = module.blog_vpc.public_subnets
 
