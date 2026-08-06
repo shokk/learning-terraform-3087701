@@ -73,7 +73,7 @@ module "blog_sg" {
 
 module "blog_alb" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "9.9.0"
+  version = "10.5.0"
 
   name    = "blog-alb"
   vpc_id  = module.blog_vpc.vpc_id
@@ -93,11 +93,11 @@ module "blog_alb" {
 
   target_groups = {
     blog_tg = {
-      name_prefix      = "blog-"
-      protocol         = "HTTP"
-      port             = 80
-      target_type      = "instance"
-      
+      name_prefix = "blog-"
+      protocol    = "HTTP"
+      port        = 80
+      target_type = "instance"
+
       # 🟢 FIX: Tells the module to skip its internal target attachment loop
       create_attachment = false
 
@@ -134,6 +134,16 @@ module "blog_autoscaling" {
   security_groups      = [module.blog_sg.security_group_id]
   instance_type        = var.instance_type
   image_id             = data.aws_ami.app_ami.id
+
+  user_data = base64encode(<<-EOF
+              #!/bin/bash
+              dnf update -y
+              dnf install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              echo "<h1>Terraform Learning: Server Live!</h1>" > /var/www/html/index.html
+              EOF
+  )
 
   traffic_source_attachments = {
     blog_alb = {
