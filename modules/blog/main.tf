@@ -12,7 +12,7 @@ data "aws_ami" "app_ami" {
     values = ["hvm"]
   }
 
-  owners   = [var.ami_filter.owner]
+  owners = [var.ami_filter.owner]
 
   filter {
     name   = "state"
@@ -95,7 +95,7 @@ module "blog_alb" {
 
   target_groups = {
     blog_tg = {
-      name_prefix = "blog-${var.environment.name}-"
+      name        = "blog-${var.environment.name}-tg"
       protocol    = "HTTP"
       port        = 80
       target_type = "instance"
