@@ -148,7 +148,7 @@ module "blog_autoscaling" {
   )
 
   traffic_source_attachments = {
-    blog-alb-${var.environment.name} = {
+    "blog-alb-${var.environment.name}" = {
       traffic_source_identifier = module.blog_alb.target_groups["blog_tg"].arn
     }
   }
