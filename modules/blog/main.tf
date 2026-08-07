@@ -42,7 +42,6 @@ module "blog_vpc" {
   }
 }
 
-# 3. Security Group for the Load Balancer
 module "alb_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "5.1.0"
@@ -60,7 +59,7 @@ module "alb_sg" {
 module "blog_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "5.1.0"
-  name    = "blog-app-sg"
+  name    = "blog-app-sg-${var.environment.name}"
   vpc_id  = module.blog_vpc.vpc_id
 
   ingress_with_source_security_group_id = [
@@ -78,7 +77,7 @@ module "blog_alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "10.5.0"
 
-  name    = "blog-alb"
+  name    = "blog-alb-${var.environment.name}"
   vpc_id  = module.blog_vpc.vpc_id
   subnets = module.blog_vpc.public_subnets
 
@@ -96,7 +95,7 @@ module "blog_alb" {
 
   target_groups = {
     blog_tg = {
-      name_prefix = "blog-"
+      name_prefix = "blog-${var.environment.name}-"
       protocol    = "HTTP"
       port        = 80
       target_type = "instance"
@@ -126,14 +125,14 @@ module "blog_autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
   version = "9.3.0"
 
-  name = "blog"
+  name = "blog-${var.environment.name}"
 
   min_size = var.min_size
   max_size = var.max_size
 
   vpc_zone_identifier = module.blog_vpc.public_subnets
 
-  launch_template_name = "blog"
+  launch_template_name = "blog-${var.environment.name}"
   security_groups      = [module.blog_sg.security_group_id]
   instance_type        = var.instance_type
   image_id             = data.aws_ami.app_ami.id
@@ -149,8 +148,7 @@ module "blog_autoscaling" {
   )
 
   traffic_source_attachments = {
-    blog_alb = {
-      # 🟢 FIX 3: Pull the target group ARN directly from the ALB module outputs mapping
+    blog-alb-${var.environment.name} = {
       traffic_source_identifier = module.blog_alb.target_groups["blog_tg"].arn
     }
   }
